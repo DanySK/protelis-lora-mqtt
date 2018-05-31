@@ -1,12 +1,31 @@
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import it.unibo.kolora.Inbound
 import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
+import it.unibo.kolora.Message.Companion.toMessage
+import it.unibo.kolora.Outbound
 
 fun main(args: Array<String>) {
     val sampleClient = MqttClient("tcp://localhost:1883", "example", MemoryPersistence())
     sampleClient.connect(MqttConnectOptions().also { it.isCleanSession = true })
-    sampleClient.publish("application/ahmeddanilo/node/[devEUI]/tx", MqttMessage("test".toByteArray(Charsets.UTF_8)))
-    sampleClient.disconnect()
+    println("subscribing")
+    sampleClient.subscribe("application/1/node/003fb1fe08f0f264/rx") { topic, message: MqttMessage ->
+        println("Received: $message")
+        try {
+            val received = message.toMessage<Inbound>()
+            println("Converted to $received")
+            println("Payload ${received.`object`}")
+            // TODO: parse JSON, extract transaction and frame, rebuild byte sequence
+            val toSend = Outbound(received.`object`, confirmed = false).toMqtt()
+            println("sending $toSend")
+            sampleClient.publish("application/1/node/003fb1fe08f0f264/tx", toSend)
+            println("Sent: $toSend")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }
 

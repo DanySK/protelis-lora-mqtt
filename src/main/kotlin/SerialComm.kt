@@ -11,8 +11,9 @@ fun main(args: Array<String>) {
     val nwkskey = "94aee5a8928ebf79cdd20f53f29fef53"
     val appskey = "e3180031cbec96ffaefb60286820b0aa"
     val devaddr = "26011adc"
+    val needsConfig = false;
 
-    val port = SerialPort.getCommPort("/dev/ttyACM12")//SerialPort.getCommPorts()[0]
+    val port = SerialPort.getCommPort("/dev/ttyACM14")//SerialPort.getCommPorts()[0]
     println(port.descriptivePortName)
     port.baudRate = 57600
     port.numDataBits = 8
@@ -22,49 +23,65 @@ fun main(args: Array<String>) {
     port.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 1000, 1000)
     println("Opening port")
     println(port.command("sys get ver"))
-//    port.run {
-//        command("mac set nwkskey $nwkskey").withResult()
-//        command("mac set appskey $appskey").withResult()
-//        command("mac set devaddr $devaddr").withResult()
-//        command("mac set adr on").withResult()
-//        command("mac save").withResult()
-//        command("mac join abp").withResult()
-//    }
-////    while (true) {
-//        port.command("mac tx uncnf 10 ffffffffffff")
-////    }
+    port.takeIf { needsConfig }?.run {
+        command("mac set nwkskey $nwkskey").withResult()
+        command("mac set appskey $appskey").withResult()
+        command("mac set devaddr $devaddr").withResult()
+        command("mac set adr on").withResult()
+        command("mac save").withResult()
+        command("mac join abp").withResult("ok\r\naccepted")
+    }
+    generateSequence(0) { (it + 1) % 255  }.forEach { transaction ->
+        (0..3).forEach {frame ->
+            val tr = transaction.toHexByte()
+            val fr = frame.toHexByte()
+            println("tr hex: $tr")
+            println("fr hex: $fr")
+            port.command("mac tx uncnf 10 fffffffffffffffffff0000fff00ff0$tr${fr}")
+            Thread.sleep(30000)
+        }
+    }
 }
+
+fun Int.toHexByte(): String = Integer.toHexString(this).let { when (it.length) {
+    1 -> "0$it"
+    2 -> it
+    else -> throw IllegalArgumentException("$this is not a valid byte ($it)")
+} }
 
 fun String.withResult(result: String = "ok") {
     if(result != this) throw IllegalStateException("Expected $result, got $this")
 }
 
-fun SerialPort.command(command: String): String {
-    if (openPort()) {
-        val mutex = CountDownLatch(1)
-        val listener = object: SerialPortDataListener {
-            override fun serialEvent(event: SerialPortEvent) = mutex.countDown()
-            override fun getListeningEvents() = SerialPort.LISTENING_EVENT_DATA_AVAILABLE
-        }
-        addDataListener(listener)
-        val message = "$command\r\n".toByteArray(StandardCharsets.US_ASCII)
-        val written = writeBytes(message, message.size.toLong())
-        println("written: $command ($written bytes)")
-        var sleeping = System.nanoTime()
-        if(mutex.await(20, TimeUnit.SECONDS)) {
-            Thread.sleep(500)
-            sleeping = System.nanoTime() - sleeping
-            val buffer = ByteArray(bytesAvailable())
-            val read = readBytes(buffer, buffer.size.toLong())
-            val content = buffer.sliceArray(0..Math.max(0, read - 3)).toString(Charsets.US_ASCII)
-            println("Read $content after ${sleeping / 1E6}ms ($read bytes)")
-            return content
+@Synchronized fun SerialPort.command(command: String): String {
+    try {
+        if (openPort()) {
+            val mutex = CountDownLatch(1)
+            val listener = object: SerialPortDataListener {
+                override fun serialEvent(event: SerialPortEvent) = mutex.countDown()
+                override fun getListeningEvents() = SerialPort.LISTENING_EVENT_DATA_AVAILABLE
+            }
+            addDataListener(listener)
+            val message = "$command\r\n".toByteArray(StandardCharsets.US_ASCII)
+            val written = writeBytes(message, message.size.toLong())
+            println("written: $command ($written bytes)")
+            var sleeping = System.nanoTime()
+            if(mutex.await(20, TimeUnit.SECONDS)) {
+                Thread.sleep(50)
+                sleeping = System.nanoTime() - sleeping
+                val buffer = ByteArray(bytesAvailable())
+                val read = readBytes(buffer, buffer.size.toLong())
+                val content = buffer.sliceArray(0..Math.max(0, read - 3)).toString(Charsets.US_ASCII)
+                println("Read $content after ${sleeping / 1E6}ms ($read bytes)")
+                return content
+            } else {
+                throw IllegalStateException("No answer from device.")
+            }
         } else {
-            throw IllegalStateException("No answer from device.")
+            throw IllegalStateException("Failure opening port")
         }
+    } finally {
         removeDataListener()
         closePort()
-    } else {
-        throw IllegalStateException("Failure opening port")
     }
 }
