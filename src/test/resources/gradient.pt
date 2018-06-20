@@ -1,0 +1,5 @@
+module gradient
+
+import protelis:coord:spreading
+
+distanceTo(true)
