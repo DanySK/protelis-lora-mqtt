@@ -2,9 +2,7 @@ import com.fazecast.jSerialComm.SerialPort
 import com.fazecast.jSerialComm.SerialPortDataListener
 import com.fazecast.jSerialComm.SerialPortEvent
 import java.nio.charset.StandardCharsets
-import java.util.*
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 
 fun main(args: Array<String>) {
@@ -22,20 +20,20 @@ fun main(args: Array<String>) {
     port.setFlowControl(SerialPort.FLOW_CONTROL_DISABLED)
     port.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 1000, 1000)
     println("Opening port")
-    println(port.command("sys get ver"))
+    println(port.writeString("sys get ver"))
     port.takeIf { needsConfig }?.run {
-        command("mac set nwkskey $nwkskey").withResult()
-        command("mac set appskey $appskey").withResult()
-        command("mac set devaddr $devaddr").withResult()
-        command("mac set adr on").withResult()
-        command("mac save").withResult()
+        writeString("mac set nwkskey $nwkskey").withResult()
+        writeString("mac set appskey $appskey").withResult()
+        writeString("mac set devaddr $devaddr").withResult()
+        writeString("mac set adr on").withResult()
+        writeString("mac save").withResult()
     }
-    port.command("mac join abp")
+    port.writeString("mac join abp")
     with(port) {
-//        command("mac set adr off")
-//        command("mac set dr 5")
-//        command("mac save").withResult()
-        (1..3).forEach { command("mac set ch status $it off") }
+//        writeString("mac set adr off")
+//        writeString("mac set dr 5")
+//        writeString("mac save").withResult()
+        (1..3).forEach { writeString("mac set ch status $it off") }
     }
     generateSequence(0) { (it + 1) % 255  }.forEach { transaction ->
         (0..3).forEach {frame ->
@@ -43,7 +41,7 @@ fun main(args: Array<String>) {
             val fr = frame.toHexByte()
             println("tr hex: $tr")
             println("fr hex: $fr")
-            port.command("mac tx uncnf 10 ff$tr${fr}")
+            port.writeString("mac tx uncnf 10 ff$tr${fr}")
             Thread.sleep(30000)
 
         }
@@ -60,7 +58,7 @@ fun String.withResult(result: String = "ok") {
     if(result != this) throw IllegalStateException("Expected $result, got $this")
 }
 
-@Synchronized fun SerialPort.command(command: String): String {
+@Synchronized fun SerialPort.writeString(command: String): String {
     try {
         if (openPort()) {
             val mutex = CountDownLatch(1)
