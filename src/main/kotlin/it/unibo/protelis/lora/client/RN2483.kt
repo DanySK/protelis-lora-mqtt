@@ -5,23 +5,39 @@ import writeString
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.primaryConstructor
 
-sealed class Command(val command: String) {
-    abstract fun response(response: String): Response
+sealed class Command(val command: String, val expectsResponse: Boolean = true) {
+    open fun response(response: String): Response =
+        if (expectsResponse) Response.get(response)
+        else throw IllegalStateException("$command does not provide a response.")
+    override fun toString() = command
 
-    sealed class System(subcommand: String) : Command("sys $subcommand") {
+    sealed class System(val subcommand: String, expectsResponse: Boolean = true)
+            : Command("sys $subcommand", expectsResponse) {
         class Sleep(length: Int) : System("sleep $length") {
             init {
                 if (!(length in 100..429967296)) {
                     throw IllegalArgumentException("invalid length")
                 }
             }
-            override fun response(response: String) = Response.get(response).let {
-                if (it is Response.Ok || it is Response.InvalidData) it
-                else throw IllegalArgumentException("Not a valid response: $response")
-            }
         }
-        object Reset: System("reset") {
-            override fun response(response: String) = throw IllegalStateException("${javaClass.simpleName} has no response")
+        object Reset: System("reset")
+        object EraseFirmware: System("eraseFW", false)
+        object FactoryReset: System("factoryRESET")
+        sealed class Set(subcommand: String) : System("set $subcommand") {
+            class NVM(address: String, data: String): Set("nvm $address $data") {
+                init {
+                    if (!address.isHex()) throw IllegalArgumentException("address must be hex: $address")
+                    if (!data.isHex()) throw IllegalArgumentException("address must be hex: $address")
+                }
+            }
+            class PinDig(name: String, state: Boolean): Set("pindig $name ${if (state) 1 else 0}"){
+                companion object {
+                    val availablePins = (0..14).map { "GPI0$it" }.toSet() + setOf("UART_CTS", "UART_RTS", "TEST0", "TEST1")
+                }
+                init {
+                    if (!(name in availablePins)) throw IllegalArgumentException("Pin name ($name) must be in $availablePins")
+                }
+            }
         }
     }
 }
@@ -71,12 +87,14 @@ sealed class Response(val preamble: String, val then: Response? = null) {
 }
 
 class RN2483(private val port: SerialPort) {
-    fun execute(command: Command, shouldRespond: Boolean = true): Response = with(command) {
+    fun execute(command: Command): Response = with(command) {
         port.writeString(this.command)
-        if (shouldRespond) response(port.readLine()) else Response.NoResponse
+        if (command.expectsResponse) response(port.readLine()) else Response.NoResponse
     }
 }
 
+fun String.isHex() = "[a-f0-9]*".toRegex().matches(this)
+
 fun main(args: Array<String>) {
-    println((Response.get("RN2483 sdafjewiu freiubire") as Response.DeviceInfo).info)
+    println((Command.System.Reset.response("RN2483")))
 }
