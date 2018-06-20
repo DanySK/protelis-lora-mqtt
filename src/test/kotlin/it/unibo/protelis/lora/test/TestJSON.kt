@@ -1,7 +1,7 @@
 package it.unibo.protelis.lora.test
 
 import com.google.gson.Gson
-import it.unibo.kolora.Inbound
+import it.unibo.protelis.lora.Inbound
 import org.junit.Test
 
 class TestJSON {

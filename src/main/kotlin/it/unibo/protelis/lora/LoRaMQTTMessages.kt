@@ -1,9 +1,9 @@
-package it.unibo.kolora
+package it.unibo.protelis.lora
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import org.eclipse.paho.client.mqttv3.MqttMessage
-import java.util.*
+import java.util.UUID
 
 data class RxInfo(
     val mac: String,

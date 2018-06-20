@@ -13,7 +13,7 @@ fun main(args: Array<String>) {
     val devaddr = "26011adc"
     val needsConfig = false;
 
-    val port = SerialPort.getCommPort("/dev/ttyACM14")//SerialPort.getCommPorts()[0]
+    val port = SerialPort.getCommPort("/dev/ttyACM1")//SerialPort.getCommPorts()[0]
     println(port.descriptivePortName)
     port.baudRate = 57600
     port.numDataBits = 8
@@ -29,7 +29,13 @@ fun main(args: Array<String>) {
         command("mac set devaddr $devaddr").withResult()
         command("mac set adr on").withResult()
         command("mac save").withResult()
-        command("mac join abp").withResult("ok\r\naccepted")
+    }
+    port.command("mac join abp")
+    with(port) {
+//        command("mac set adr off")
+//        command("mac set dr 5")
+//        command("mac save").withResult()
+        (1..3).forEach { command("mac set ch status $it off") }
     }
     generateSequence(0) { (it + 1) % 255  }.forEach { transaction ->
         (0..3).forEach {frame ->
@@ -37,8 +43,9 @@ fun main(args: Array<String>) {
             val fr = frame.toHexByte()
             println("tr hex: $tr")
             println("fr hex: $fr")
-            port.command("mac tx uncnf 10 fffffffffffffffffff0000fff00ff0$tr${fr}")
+            port.command("mac tx uncnf 10 ff$tr${fr}")
             Thread.sleep(30000)
+
         }
     }
 }
@@ -66,8 +73,11 @@ fun String.withResult(result: String = "ok") {
             val written = writeBytes(message, message.size.toLong())
             println("written: $command ($written bytes)")
             var sleeping = System.nanoTime()
-            if(mutex.await(20, TimeUnit.SECONDS)) {
-                Thread.sleep(50)
+            if(mutex.await(200, TimeUnit.SECONDS)) {
+                do {
+                    var bytes = bytesAvailable()
+                    Thread.sleep(500)
+                } while (bytes != bytesAvailable())
                 sleeping = System.nanoTime() - sleeping
                 val buffer = ByteArray(bytesAvailable())
                 val read = readBytes(buffer, buffer.size.toLong())

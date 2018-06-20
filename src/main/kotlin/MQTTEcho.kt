@@ -1,12 +1,11 @@
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import it.unibo.kolora.Inbound
+
+import it.unibo.protelis.lora.Inbound
+import it.unibo.protelis.lora.Message.Companion.toMessage
+import it.unibo.protelis.lora.Outbound
 import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
-import it.unibo.kolora.Message.Companion.toMessage
-import it.unibo.kolora.Outbound
 
 fun main(args: Array<String>) {
     val sampleClient = MqttClient("tcp://localhost:1883", "example", MemoryPersistence())
