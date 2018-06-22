@@ -1,6 +1,16 @@
 package it.unibo.protelis.lora.client
 
 import com.fazecast.jSerialComm.SerialPort
+import it.unibo.protelis.lora.force16bit
+import it.unibo.protelis.lora.force3bit
+import it.unibo.protelis.lora.force4bit
+import it.unibo.protelis.lora.force8bit
+import it.unibo.protelis.lora.forceHex
+import it.unibo.protelis.lora.forceRange
+import it.unibo.protelis.lora.forceSize
+import it.unibo.protelis.lora.forceValidFrequency
+import it.unibo.protelis.lora.isHex
+import it.unibo.protelis.lora.toOnOff
 import writeString
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.primaryConstructor
@@ -136,17 +146,6 @@ sealed class Command(val command: String, val expectsResponse: Boolean = true) {
     }
 }
 
-fun Int.forceValidFrequency(): Int = this.let {
-    if (it < 500000000) it.forceRange(433050000, 434790000)
-    else it.forceRange(863000000, 870000000)
-}
-
-fun Int.force16bit(): Int = this.forceRange(0, 65535)
-fun Int.force8bit(): Int = this.forceRange(0, 255)
-fun Int.force4bit(): Int = this.forceRange(0, 15)
-fun Int.force3bit(): Int = this.forceRange(0, 7)
-fun Boolean.toOnOff() = if (this) "on" else "off"
-
 sealed class Response(val preamble: String, val then: Response? = null) {
     companion object {
         fun get(key: String) = Response::class.nestedClasses.asSequence()
@@ -178,7 +177,7 @@ sealed class Response(val preamble: String, val then: Response? = null) {
     data class Value(val value: String): Response("") {
         override fun toString() = "Value($value)"
     }
-    data class TransmissionOKDataReceived(val response: String): Response("mac_rx") {
+    data class DataReceived(val response: String): Response("mac_rx") {
         val port: Int
         val data: String
         init {
@@ -199,20 +198,6 @@ class RN2483(val port: SerialPort) {
         port.writeString(this.command)
         if (command.expectsResponse) response(port.readLine()) else Response.NoResponse
     }
-}
-
-fun String.isHex() = "[a-f0-9]*".toRegex().matches(this)
-fun String.forceHex(message: String = "Must be hex: $this"): String {
-    if (!isHex()) throw IllegalArgumentException(message)
-    return this
-}
-fun String.forceSize(size: Int, message: String = "Must be $size characters long: $this"): String {
-    if (size != length) throw IllegalArgumentException(message)
-    return this
-}
-fun Int.forceRange(start: Int, end: Int): Int {
-    if (this < start || this > end) throw IllegalArgumentException("$this not in allowed range [$start-$end]")
-    return this
 }
 
 fun main(args: Array<String>) {
