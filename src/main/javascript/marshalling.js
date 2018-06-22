@@ -1,13 +1,14 @@
 function Decode(fPort, bytes) {
   return {
-    "transaction": bytes[bytes.length - 2],
-    "frame": bytes[bytes.length - 1],
+    "transaction": bytes[0],
+    "framecount": bytes[1],
+    "frame": bytes[2],
     "payload": bytes.slice(0, bytes.length - 2).map(function (x) { return parseInt(x.toString()) } )
 	};
 }
 
 function Encode(fPort, obj) {
-  return obj.payload.concat([obj.transaction, obj.frame]);
+  return [obj.transaction, obj.framecount, obj.frame].concat(obj.payload);
 }
 
 var a = [0, 1, 2, 3, 234, 255]
