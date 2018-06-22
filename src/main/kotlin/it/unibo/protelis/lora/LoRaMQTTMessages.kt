@@ -38,8 +38,9 @@ sealed class Message {
 
 data class Payload (
         val transaction: Int = 0,
+        val frameCount: Int = 1,
         val frame: Int = 0,
-        val payload: ShortArray = ShortArray(0)
+        val payload: ByteArray = ByteArray(0)
 ) {
     init {
         if (payload.any { (it < 0) or (it > 255) } )

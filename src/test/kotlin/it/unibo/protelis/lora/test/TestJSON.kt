@@ -3,6 +3,7 @@ package it.unibo.protelis.lora.test
 import com.google.gson.Gson
 import it.unibo.protelis.lora.Inbound
 import org.junit.Test
+import kotlin.test.assertNotNull
 
 class TestJSON {
     @Test
@@ -37,9 +38,12 @@ class TestJSON {
         |"data":"////////",
         |"object":{
         |   "transaction":"129",
+        |   "framecount": 130,
         |   "frame": 130,
         |   "payload": [ 2, 3, 234, 255 ]
         |}
     |}""".trimMargin(), Inbound::class.java)
+        assertNotNull(res)
+        println(res)
     }
 }
