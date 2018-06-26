@@ -64,7 +64,7 @@ data class Inbound (
 data class Outbound (
         val `object`: Payload,
         val reference: String = UUID.randomUUID().toString(),
-        val confirmed: Boolean = true,
+        val confirmed: Boolean = false,
         val fPort: Int = (Math.random() * (Byte.MAX_VALUE - 10)).toInt(),
         val data: String = ""
 ) : Message()

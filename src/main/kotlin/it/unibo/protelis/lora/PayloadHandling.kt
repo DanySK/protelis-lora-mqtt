@@ -77,3 +77,39 @@ object ThreeBytesSegmenter : Segmenter {
     }
 
 }
+
+interface DownlinkSerializer {
+    fun serialize(messages: Map<LoRaDeviceUID, ByteArray>): HexString
+    fun deserialize(serialized: HexString): Map<LoRaDeviceUID, ByteArray>
+}
+
+object TwoBytesSizedHeader : DownlinkSerializer {
+
+    override fun serialize(messages: Map<LoRaDeviceUID, ByteArray>) =
+        messages.map {
+            val size = Integer.toHexString(it.key.deviceAddress.length / 2 + it.value.size).let {
+                when (it.length) {
+                    1 -> "000$it"
+                    2 -> "00$it"
+                    3 -> "0$it"
+                    4 -> it
+                    else -> throw IllegalArgumentException("Unable to translate $it to a 4-char hex string")
+                }
+            }
+            "$size${it.key.deviceAddress}${HexString(it.value)}"
+        }.joinToString().toHex()
+
+    override fun deserialize(serialized: HexString): Map<LoRaDeviceUID, ByteArray> {
+        var remainder = serialized
+        var result = emptyMap<LoRaDeviceUID, ByteArray>()
+        while (remainder.length > LoRaDeviceUID.deviceAddressLength + 2) {
+            val deviceEUI = serialized.substring(2 until 2 + LoRaDeviceUID.deviceAddressLength).toHex()
+            val end = Integer.parseInt(serialized.substring(0..1), 16) + 2
+            val payload = serialized.substring(2 + LoRaDeviceUID.deviceAddressLength until end).toHex().toByteArray()
+            result += LoRaDeviceUID(deviceEUI) to payload
+            remainder = remainder.substring(end).toHex()
+        }
+        return result
+    }
+
+}

@@ -5,6 +5,7 @@ import com.fazecast.jSerialComm.SerialPortDataListener
 import com.fazecast.jSerialComm.SerialPortEvent
 import gnu.trove.list.TByteList
 import gnu.trove.list.array.TByteArrayList
+import it.unibo.protelis.lora.HexString
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.LinkedBlockingQueue
@@ -12,7 +13,7 @@ import java.util.concurrent.TimeUnit
 
 class LoRaNode(private val serialPort: SerialPort) {
 
-    private val readQueue: BlockingQueue<String> = LinkedBlockingQueue()
+    private val readQueue: BlockingQueue<HexString> = LinkedBlockingQueue()
 
     init {
         serialPort.addDataListener(object: SerialPortDataListener {

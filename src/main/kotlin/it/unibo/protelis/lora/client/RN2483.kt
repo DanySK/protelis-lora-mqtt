@@ -1,15 +1,15 @@
 package it.unibo.protelis.lora.client
 
 import com.fazecast.jSerialComm.SerialPort
+import it.unibo.protelis.lora.HexString
 import it.unibo.protelis.lora.force16bit
 import it.unibo.protelis.lora.force3bit
 import it.unibo.protelis.lora.force4bit
 import it.unibo.protelis.lora.force8bit
-import it.unibo.protelis.lora.forceHex
 import it.unibo.protelis.lora.forceRange
-import it.unibo.protelis.lora.forceSize
 import it.unibo.protelis.lora.forceValidFrequency
 import it.unibo.protelis.lora.isHex
+import it.unibo.protelis.lora.toHex
 import it.unibo.protelis.lora.toOnOff
 import writeString
 import kotlin.reflect.full.isSubclassOf
@@ -64,10 +64,10 @@ sealed class Command(val command: String, val expectsResponse: Boolean = true) {
         data class Reset(val band: Int) : Mac("reset $band")
         data class Transmit(
             val device: RN2483,
-            val data: String,
+            val data: HexString,
             val confirmed: Boolean = false,
             val port: Int = (Math.random() * 223).toInt() + 1)
-            : Mac("tx ${if (confirmed) "" else "un"}cnf ${port.forceRange(1, 233)} ${data.forceHex()}") {
+            : Mac("tx ${if (confirmed) "" else "un"}cnf ${port.forceRange(1, 233)} ${data}") {
             override fun response(response: String) = super.response(response).let {
                     if (it is Response.Ok) Response.Ok(super.response(device.port.readLine()))
                     else it
@@ -85,20 +85,20 @@ sealed class Command(val command: String, val expectsResponse: Boolean = true) {
         object Pause: Mac("pause")
         object Resume: Mac("resume")
         sealed class Set(subcommand: String): Mac("set $subcommand") {
-            data class DeviceAddress(val address: String): Set(address) {
-                init { address.forceHex().forceSize(8) }
+            data class DeviceAddress(val address: HexString): Set("devaddr $address") {
+                init { address.forceSize(8) }
             }
-            data class DeviceEUI(val devEUI: String)
-                : Set("deveui ${devEUI.forceHex().forceSize(16)}")
-            data class ApplicationEUI(val appEUI: String)
-                : Set("appeui ${appEUI.forceHex().forceSize(16)}")
-            data class NetworkSessionKey(val networkSessionKey: String)
-                : Set("nwkskey ${networkSessionKey.forceHex().forceSize(32)}")
-            data class ApplicationSessionKey(val applicationSessionKey: String)
-                : Set("appskey ${applicationSessionKey.forceHex().forceSize(32)}") {
+            data class DeviceEUI(val devEUI: HexString)
+                : Set("deveui ${devEUI.forceSize(16)}")
+            data class ApplicationEUI(val appEUI: HexString)
+                : Set("appeui ${appEUI.forceSize(16)}")
+            data class NetworkSessionKey(val networkSessionKey: HexString)
+                : Set("nwkskey ${networkSessionKey.forceSize(32)}")
+            data class ApplicationSessionKey(val applicationSessionKey: HexString)
+                : Set("appskey ${applicationSessionKey.forceSize(32)}") {
             }
-            data class ApplicationKey(val applicationKey: String)
-                : Set("appkey ${applicationKey.forceHex().forceSize(32)}")
+            data class ApplicationKey(val applicationKey: HexString)
+                : Set("appkey ${applicationKey.forceSize(32)}")
             data class PowerIndex(val index: Int): Set("pwridx ${index.forceRange(0, 5)}")
             data class DataRate(val dataRate: Int): Set("dr ${dataRate.force3bit()}")
             data class AdaptiveDataRate(val status: Boolean = true): Set("adr ${status.toOnOff()}")
@@ -201,5 +201,5 @@ class RN2483(val port: SerialPort) {
 }
 
 fun main(args: Array<String>) {
-    println((Command.Mac.Set.DeviceEUI("ffffff000aaaa000").response("mac_rx 12 ffffaaffafa00000")))
+    println((Command.Mac.Set.DeviceEUI("ffffff000aaaa000".toHex()).response("mac_rx 12 ffffaaffafa00000")))
 }

@@ -4,7 +4,6 @@ import com.fazecast.jSerialComm.SerialPort
 import gnu.trove.list.TByteList
 import gnu.trove.list.array.TByteArrayList
 import it.unibo.protelis.lora.removeLast
-import java.lang.System
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
