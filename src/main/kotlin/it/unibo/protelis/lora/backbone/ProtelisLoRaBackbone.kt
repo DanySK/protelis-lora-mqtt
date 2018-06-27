@@ -40,7 +40,7 @@ class ProtelisLoRaBackbone @JvmOverloads constructor(
     }
 
 //    private var ongoingDownlinks: Map<LoRaDeviceUID> = emptySet()
-    fun run(): Unit = client.subscribe("application/$applicationName/node/*/rx") { topic, message ->
+    fun run(): Unit = client.subscribe("application/$applicationName/node/+/rx") { topic, message ->
         println("Received: $message")
         try {
             val received = message.toMessage<Inbound>()
@@ -65,28 +65,35 @@ class ProtelisLoRaBackbone @JvmOverloads constructor(
                 inboundTransactions.put(sender, inboundTransaction, thisTransaction)
             }
             val toSend: List<ByteArray> = outboundTransactions.get(sender) ?:
-                segmenter.segment(serializer.serialize(messages.asMap().filterKeys { it != sender }).toByteArray())
-                    .also {
-                        outboundTransactions += sender to it
-                        // Begin a new transaction
-                        val currentCount: Counters = outboundCounters.get(sender)?.let { previous ->
-                            Counters(previous.transaction + 1, it.size, 0)
-                        } ?: Counters(0, it.size, 0)
-                        outboundCounters += sender to currentCount
-                    }
+                if (frameNumber == 0) {
+                    segmenter.segment(serializer.serialize(messages.asMap().filterKeys { it != sender }).toByteArray())
+                        .also {
+                            outboundTransactions += sender to it
+                            // Begin a new transaction
+                            val currentCount: Counters = outboundCounters.get(sender)?.let { previous ->
+                                Counters(previous.transaction + 1, it.size, 0)
+                            } ?: Counters(0, it.size, 0)
+                            outboundCounters += sender to currentCount
+                        }
+                } else {
+                    emptyList()
+                }
             var counters: Counters = outboundCounters.get(sender) ?: throw IllegalStateException()
-            if (toSend.size <= 1) {
+            if (counters.frame < toSend.size) {
+                val next = toSend[counters.frame]
+                client.publish("application/1/node/$sender/tx", Outbound(
+                    Payload(
+                        transaction = counters.transaction,
+                        frameCount = counters.frameCount,
+                        frame = counters.frame,
+                        payload = next
+                    )
+                ).toMqtt())
+                // Frame sent, increase for next frame to be sent
+                outboundCounters += sender to Counters(counters.transaction, counters.frameCount, counters.frame + 1)
+            } else {
                 outboundTransactions -= sender
             }
-            val next = toSend[0]
-            client.publish("application/1/node/$sender/tx", Outbound(Payload(
-                transaction = counters.transaction,
-                frameCount = counters.frameCount,
-                frame = counters.frame,
-                payload = next
-            )).toMqtt())
-            // Frame sent, increase for next frame to be sent
-            outboundCounters += sender to Counters(counters.transaction, counters.frameCount, counters.frame + 1)
         } catch (e: Exception) {
             e.printStackTrace()
         }

@@ -26,6 +26,9 @@ class LoRaClassANetworking(
                 received += it
             }
         }
+        if (received.isEmpty()) {
+            return emptyMap()
+        }
         while (!segmenter.transactionComplete(received)) {
             received += sendAndReceive(HexString("")) ?: throw IllegalStateException("Missing response data")
         }
