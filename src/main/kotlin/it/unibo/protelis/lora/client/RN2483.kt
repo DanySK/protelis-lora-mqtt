@@ -11,9 +11,8 @@ import it.unibo.protelis.lora.forceValidFrequency
 import it.unibo.protelis.lora.isHex
 import it.unibo.protelis.lora.toHex
 import it.unibo.protelis.lora.toOnOff
-import writeString
+import java.util.concurrent.TimeUnit
 import kotlin.reflect.full.isSubclassOf
-import kotlin.reflect.full.primaryConstructor
 
 sealed class Command(val command: String, val expectsResponse: Boolean = true) {
     open fun response(response: String): Response =
@@ -63,15 +62,22 @@ sealed class Command(val command: String, val expectsResponse: Boolean = true) {
     sealed class Mac(val subcommand: String) : Command("mac $subcommand") {
         data class Reset(val band: Int) : Mac("reset $band")
         data class Transmit(
-            val device: RN2483,
-            val data: HexString,
-            val confirmed: Boolean = false,
-            val port: Int = (Math.random() * 223).toInt() + 1)
+                val device: RN2483,
+                val data: HexString,
+                val confirmed: Boolean = false,
+                val port: Int = (Math.random() * 223).toInt() + 1)
             : Mac("tx ${if (confirmed) "" else "un"}cnf ${port.forceRange(1, 233)} ${data}") {
-            override fun response(response: String) = super.response(response).let {
-                    if (it is Response.Ok) Response.Ok(super.response(device.port.readLine()))
-                    else it
+            override fun response(response: String): Response =
+                super.response(response).let {
+                    when (it) {
+                        is Response.Ok -> Response.Ok(fetchAnotherResponse())
+                        is Response.DataReceived -> Response.DataReceived(it.data, fetchAnotherResponse())
+                        is Response.TransmissionOKNoReply -> it
+                        else -> it
+                    }
                 }
+
+            private fun fetchAnotherResponse() = response(device.port.readLine(5, TimeUnit.MINUTES))
         }
         data class Join(val device: RN2483, val otaa: Boolean = false)
             : Mac("join ${if (otaa) "otaa" else "abp"}") {
@@ -148,12 +154,15 @@ sealed class Command(val command: String, val expectsResponse: Boolean = true) {
 
 sealed class Response(val preamble: String, val then: Response? = null) {
     companion object {
-        fun get(key: String) = Response::class.nestedClasses.asSequence()
+        val candidates = Response::class.nestedClasses.asSequence()
             .filter { it.isFinal && it.isSubclassOf(Response::class) }
-            .map{ it.objectInstance ?: it.primaryConstructor?.let {
-                println("$it - ${it.parameters} - ${it.parameters.all { it.isOptional }}")
-                if (it.parameters.size == 0 || it.parameters.all { it.isOptional }) it.callBy(emptyMap())
-                else it.call(key)
+            .sortedBy { if (it.objectInstance == null) 1 else 0 }
+        fun get(key: String) = candidates
+            .map{ it.objectInstance ?: when {
+                key.startsWith(DataReceived.preamble) -> DataReceived(key)
+                key.startsWith(Ok.preamble) -> Ok.empty
+                key.startsWith(DeviceInfo.preamble) -> DeviceInfo(key)
+                else -> Value(key)
             }}
             .map { it as Response }
             .filter { it.preamble.isEmpty() || it.preamble == key.split(" ")[0] }
@@ -161,7 +170,6 @@ sealed class Response(val preamble: String, val then: Response? = null) {
     }
     override fun toString() = "${javaClass.simpleName}($preamble)"
 
-    class Ok(then: Response? = null) : Response("ok", then)
     object InvalidParam: Response("invalid_param")
     object NotJoined: Response("not_joined")
     object NoFreeChannel: Response("no_free_ch")
@@ -177,7 +185,18 @@ sealed class Response(val preamble: String, val then: Response? = null) {
     data class Value(val value: String): Response("") {
         override fun toString() = "Value($value)"
     }
-    data class DataReceived(val response: String): Response("mac_rx") {
+    data class DeviceInfo(val info: String) : Response(preamble) {
+        companion object {
+            val preamble = "RN2483"
+        }
+    }
+    class Ok(then: Response? = null) : Response(preamble, then) {
+        companion object {
+            val preamble = "ok"
+            val empty: Ok = Ok()
+        }
+    }
+    class DataReceived(val response: String, then: Response? = null): Response(preamble, then) {
         val port: Int
         val data: String
         init {
@@ -187,16 +206,16 @@ sealed class Response(val preamble: String, val then: Response? = null) {
             data = groups?.get(2)?.value ?: ""
         }
         companion object {
-            private val regex = "mac_rx (?<port>\\d*) (?<data>[a-f0-9]*)".toRegex()
+            val preamble = "mac_rx"
+            private val regex = "$preamble (?<port>\\d*) (?<data>[a-f0-9]*)".toRegex()
         }
     }
-    data class DeviceInfo(val info: String) : Response("RN2483")
 }
 
 class RN2483(val port: SerialPort) {
-    fun execute(command: Command): Response = with(command) {
-        port.writeString(this.command)
-        if (command.expectsResponse) response(port.readLine()) else Response.NoResponse
+    fun execute(command: Command, timeout: Long = 1, unit: TimeUnit = TimeUnit.SECONDS): Response = with(command) {
+        port.write(this.command)
+        if (command.expectsResponse) response(port.readLine(timeout, unit)) else Response.NoResponse
     }
 }
 

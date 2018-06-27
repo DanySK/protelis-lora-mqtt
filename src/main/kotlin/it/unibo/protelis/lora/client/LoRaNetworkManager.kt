@@ -1,5 +1,6 @@
 package it.unibo.protelis.lora.client
 
+import com.fazecast.jSerialComm.SerialPort
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import com.google.common.collect.ImmutableMap
@@ -20,6 +21,14 @@ class LoRaNetworkManager<P : Any> @JvmOverloads constructor(
     protected val codec: Codec<P> = JavaSerializer<P>(),
     protected val compressor: Compressor = NoCompression
 ) : NetworkManager {
+
+    @JvmOverloads constructor(
+        port: SerialPort,
+        expireAfter: Long,
+        packer: Packer<P>,
+        codec: Codec<P> = JavaSerializer<P>(),
+        compressor: Compressor = NoCompression
+    ) : this (LoRaClassANetworking(RN2483(port)), expireAfter, packer, codec, compressor)
 
     private val cache: Cache<DeviceUID, MutableMap<CodePath, Any>> = CacheBuilder.newBuilder()
         .expireAfterWrite(expireAfter, TimeUnit.SECONDS)

@@ -12,6 +12,7 @@ import it.unibo.protelis.lora.Outbound
 import it.unibo.protelis.lora.Payload
 import it.unibo.protelis.lora.Segmenter
 import it.unibo.protelis.lora.ThreeBytesSegmenter
+import it.unibo.protelis.lora.TwoBytesSizedHeader
 import it.unibo.protelis.lora.toHex
 import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
@@ -23,8 +24,8 @@ class ProtelisLoRaBackbone @JvmOverloads constructor(
     timeunit: TimeUnit = TimeUnit.SECONDS,
     private val client: MqttClient = MqttClient("tcp://localhost:1883", ProtelisLoRaBackbone::class.simpleName, MemoryPersistence()),
     private val segmenter: Segmenter = ThreeBytesSegmenter,
-    private val serializer: DownlinkSerializer,
-    val neighborhoods: NeighborhoodManager
+    private val serializer: DownlinkSerializer = TwoBytesSizedHeader,
+    val neighborhoods: NeighborhoodManager = AllNeighbors
 ) {
     private val messages: Cache<LoRaDeviceUID, ByteArray> = CacheBuilder.newBuilder()
         .expireAfterWrite(timeout, timeunit)
@@ -33,6 +34,11 @@ class ProtelisLoRaBackbone @JvmOverloads constructor(
     private data class Counters(val transaction: Int, val frameCount: Int, val frame: Int = 0)
     private var outboundCounters: Map<LoRaDeviceUID, Counters> = emptyMap()
     private val inboundTransactions: Table<LoRaDeviceUID, Int, Map<Int, ByteArray>> = HashBasedTable.create()
+
+    init {
+        client.connect()
+    }
+
 //    private var ongoingDownlinks: Map<LoRaDeviceUID> = emptySet()
     fun run(): Unit = client.subscribe("application/$applicationName/node/*/rx") { topic, message ->
         println("Received: $message")

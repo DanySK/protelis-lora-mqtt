@@ -40,16 +40,19 @@ object NoCompression : Compressor {
 }
 
 interface Segmenter {
-    fun segment(payload: ByteArray, packetSize: Int = 51, transactionId: Byte = 0): List<ByteArray>
+    fun segment(payload: ByteArray, packetSize: Int = 50, transactionId: Byte = 0): List<ByteArray>
     fun assemble(packets: Iterable<ByteArray>): ByteArray
+    fun transactionComplete(packets: Iterable<ByteArray>): Boolean
 }
 
 object ThreeBytesSegmenter : Segmenter {
     override fun segment(payload: ByteArray, packetSize: Int, transactionId: Byte): List<ByteArray> {
         if (packetSize < 4)
-            throw IllegalArgumentException("""
+            throw IllegalArgumentException(
+                """
                 The system requires three bytes for metadata, packets must be at least 4 bytes"""
-            .trimIndent())
+                    .trimIndent()
+            )
         val sliceSize = packetSize - 3
         val packetCount: Byte = (payload.size / sliceSize + 1).toByte()
         var curpacket: Byte = 0
@@ -60,22 +63,39 @@ object ThreeBytesSegmenter : Segmenter {
             .toList()
     }
 
-    override fun assemble(packets: Iterable<ByteArray>): ByteArray {
+    override fun assemble(packets: Iterable<ByteArray>): ByteArray =
+        assembleOperation(packets, AssembleStrategy { packs: List<ByteArray> ->
+            packs.map { it[0].toInt() to it.sliceArray(1 until it.size) }
+                .toMap().toSortedMap()
+                .flatMap { it.value.toList() }
+                .toByteArray()
+        })
+
+    override fun transactionComplete(packets: Iterable<ByteArray>): Boolean =
+        assembleOperation(packets, AssembleStrategy (inconsistentCount = { a, b -> true }) { false })
+
+    private fun <T> assembleOperation(packets: Iterable<ByteArray>, strategy: AssembleStrategy<T>): T {
         val transactions = packets.map { it[0] to it.sliceArray(1 until it.size) }
         if (transactions.toMap().size > 1) throw IllegalArgumentException("Multiple transactions in $transactions")
         val packs = transactions.map { it.second }
         val packetCounts = packs.map { it[0] }.toSet()
         if (packetCounts.size > 1) {
-            throw IllegalArgumentException("Inconsistent packet size reported")
+            return strategy.inconsistentSize()
         }
         val expectedPacketCount = packetCounts.first().toInt()
         if (expectedPacketCount != packs.size) {
-            throw IllegalArgumentException("Expected $expectedPacketCount packets, got ${packs.size}.")
+            return strategy.inconsistentCount(expectedPacketCount, packs.size)
         }
-        val payloads = packs.map { it[0].toInt() to it.sliceArray(1 until it.size) }.toMap().toSortedMap()
-        return payloads.flatMap { it.value.toList() }.toByteArray()
+        return strategy.compute(packs)
     }
 
+    private class AssembleStrategy<T>(
+        val inconsistentSize: () -> T = throw IllegalArgumentException("Inconsistent packet size reported"),
+        val inconsistentCount: (Int, Int) -> T = { expected, actual ->
+            throw IllegalArgumentException("Expected $expected packets, got ${actual}.")
+        },
+        val compute: (List<ByteArray>) -> T
+    )
 }
 
 interface DownlinkSerializer {

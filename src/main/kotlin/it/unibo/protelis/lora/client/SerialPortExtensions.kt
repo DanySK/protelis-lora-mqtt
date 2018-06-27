@@ -18,8 +18,8 @@ private @Synchronized inline fun <T> SerialPort.anyOperation(exec: SerialPort.()
     throw IllegalStateException("Could not open port $descriptivePortName")
 }
 
-fun SerialPort.readLine(timeout: Long = this.readTimeout.toLong(),
-                        unit: TimeUnit = TimeUnit.MILLISECONDS,
+fun SerialPort.readLine(timeout: Long = 1,
+                        unit: TimeUnit = TimeUnit.SECONDS,
                         bufferSize: Int = 10): String = anyOperation {
     var bytes: TByteList = TByteArrayList(bufferSize)
     val buffer = ByteArray(1)
@@ -34,19 +34,27 @@ fun SerialPort.readLine(timeout: Long = this.readTimeout.toLong(),
         } else {
             Thread.sleep(1)
         }
-    } while (bytes.size().let { it < 1 || bytes[it - 1] == '\n'.toByte() }
+    } while (bytes.size().let { it < 1 || bytes[it - 1] != '\n'.toByte() }
         && (System.nanoTime() - start < unit.toNanos(timeout)))
     with(bytes) {
-        removeLast()
-        if (this[size() - 1] == '\r'.toByte()) {
+        if (this.size() > 0) {
             removeLast()
+            if (this.size() > 0 && this[size() - 1] == '\r'.toByte()) {
+                removeLast()
+            }
         }
-        toArray().toString(Charsets.US_ASCII)
+        return toArray().toString(Charsets.US_ASCII).also { println("Read: $it") }
     }
 }
 
+fun SerialPort.purge(timeout: Long = 1, unit: TimeUnit = TimeUnit.SECONDS): String? =
+    generateSequence { readLine(timeout, unit) }
+        .takeWhile { it.isNotEmpty() }
+        .joinToString()
+
 @Synchronized fun SerialPort.write(command: String): ByteArray = anyOperation {
     val message = "$command\r\n".toByteArray(StandardCharsets.US_ASCII)
+    println("writing: $command")
     writeBytes(message, message.size.toLong())
     message
 }

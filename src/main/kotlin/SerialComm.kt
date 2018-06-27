@@ -58,7 +58,7 @@ fun String.withResult(result: String = "ok") {
     if(result != this) throw IllegalStateException("Expected $result, got $this")
 }
 
-@Synchronized fun SerialPort.writeString(command: String): String {
+private @Synchronized fun SerialPort.writeString(command: String): String {
     try {
         if (openPort()) {
             val mutex = CountDownLatch(1)
